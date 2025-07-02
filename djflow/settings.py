@@ -14,7 +14,10 @@ DEBUG = settings['DEBUG']
 ALLOWED_HOSTS = settings['SECURITY']['ALLOWED_HOSTS']
 DATABASES = settings['DB']
 
+DATABASE_ROUTERS = ['tenant_schemas.routers.TenantSyncRouter']
+
 MIDDLEWARE = [
+    'tenant_schemas.middleware.TenantMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -43,3 +46,4 @@ TEMPLATES = [
 WSGI_APPLICATION = 'djflow.wsgi.application'
 AUTH_PASSWORD_VALIDATORS = settings['AUTH_PASSWORD_VALIDATORS']
 LOGIN_URL = '/security/login/'
+TENANT_MODEL = 'tenant.Client'

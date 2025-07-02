@@ -16,6 +16,8 @@ from .functions import SecurityUtils
 from djflow.apps.general_functions import send_email
 from djflow.core.json_settings import get_settings
 from djflow.apps import response_messages
+from tenant_schemas.utils import schema_exists, schema_context
+from djflow.apps.tenant.models import Client
 
 settings = get_settings()
 
@@ -25,6 +27,16 @@ class Login(View):
     form = LoginForm
 
     def get(self, request):
+        if request.GET.get('tenant_name', False) and schema_exists(request.GET.get('tenant_name')):
+            protocol = "https" if settings['USE_SSL'] else "http"
+            url_redirect = "{0}://{1}.{2}{3}".format(
+                protocol,
+                request.GET.get('tenant_name'),
+                request.META['HTTP_HOST'],
+                reverse_lazy('security:login')
+            )
+            return HttpResponseRedirect(url_redirect)
+        
         if request.user.is_authenticated():
             return HttpResponseRedirect(reverse('flow:dashboard'))
         else:
@@ -51,7 +63,7 @@ class Logout(View):
 
     def get(self, request):
         logout(request)
-        return HttpResponseRedirect(reverse_lazy('website:index'))
+        return HttpResponseRedirect(reverse_lazy('security:login'))
 
 
 class UserProfileData(LoginRequiredMixin, View):
@@ -117,10 +129,28 @@ class UserNew(LoginRequiredMixin, View):
     utils = SecurityUtils()
 
     def send_welcome_mail(self, request, new_user, new_user_password):
-        ctx = {'user': request.user, 'new_user': new_user, 'new_user_password': new_user_password, 'URL_SERVER': settings['URL_SERVER']}
+        protocol = "https" if settings['USE_SSL'] else "http"
+        
+        url_server = "{0}://{1}.{2}{3}".format(
+           protocol,
+           request.tenant.schema_name,
+           settings['BASE_URL'],
+           reverse_lazy("security:login")
+        )
+        
+        ctx = {'user': request.user, 'new_user': new_user, 'new_user_password': new_user_password, 'URL_SERVER': url_server}
         html_content = render_to_string('mailing/welcome.html', ctx)
         subject = _("Bienvenido a Cashflow / invitación")
         send_email(subject, to_email=new_user.email, html_content=html_content)
+        
+        #protocol = "https" if settings['USE_SSL'] else "http"
+        
+        #url_server = "{0}://{1}.{2}".format(
+        #    protocol,
+        #    request.tenant.schema_name,
+        #    settings['BASE_URL']
+        #)
+        
 
     def get(self, request):
         ctx = {'random_password': self.utils.random_password()}
@@ -164,3 +194,51 @@ class ActiveInactiveUser(LoginRequiredMixin, View):
         except User.DoesNotExist:
             messages.error(request, _("Usuario no encontrado"))
         return HttpResponseRedirect(reverse_lazy('security:user-list'))
+    
+# ===================================================
+# Registering Tenants
+# ===================================================
+
+
+class TenantRegisterView(View):
+    template_name = "register_tenant.html"
+    active_menu = "register"
+
+    def get(self, request):
+        return render(request, self.template_name, {'active_menu': self.active_menu})
+
+    def post(self, request):
+        kwargs = {
+            'active_menu': self.active_menu,
+            'url_login_new_schema': None,
+            'form_data': request.POST
+            }
+        tenant_name = request.POST.get('subdomain')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+        if schema_exists(tenant_name):
+            print("Ya existe el schema")
+            kwargs['tenant_exist'] = True
+        else:
+            client = Client()
+            client.domain_url = '{}.localhost'.format(tenant_name)
+            client.name = tenant_name
+            client.schema_name = tenant_name
+            client.save() 
+            with schema_context(tenant_name):
+                user = User()
+                user.email = email
+                user.username = email
+                user.set_password(password)
+                user.is_active = True
+                user.is_superuser = True
+                user.save()
+                
+            url_redirect = "{0}.{1}{2}".format(
+                tenant_name, request.META['HTTP_HOST'], reverse('security:login')
+            )
+            
+            print("No existe el schema")
+            kwargs['tenant_exist'] = False
+            kwargs['url_login_new_schema'] = url_redirect
+        return render(request, self.template_name, kwargs)

@@ -1,5 +1,5 @@
 BEFORE_DJANGO_APPS = (
-
+    'tenant_schemas',
 )
 
 DJANGO_APPS = (
@@ -16,11 +16,22 @@ LOCAL_APPS = (
     'djflow.apps.flow',
     'djflow.apps.website',
     'djflow.apps.security',
+    'djflow.apps.tenant',
 )
 
 THIRD_PARTY_APPS = (
     'solo',
 )
 
+TENANT_APPS = (
+    'djflow.apps.flow',
+    'djflow.apps.website',
+    'djflow.apps.security',
+)
 
-INSTALLED_APPS = BEFORE_DJANGO_APPS + DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
+SHARED_APPS = (
+    'tenant_schemas',
+    'djflow.apps.tenant',
+) + DJANGO_APPS
+
+INSTALLED_APPS = SHARED_APPS + TENANT_APPS + THIRD_PARTY_APPS
